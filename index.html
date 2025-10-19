@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drainity Monitoring System</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/justgage"></script>
+  <script src="https://cdn.jsdelivr.net/npm/raphael"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #e7f3ff;
+      color: #333;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #b3daff;
+      padding: 20px;
+      font-size: 1.8em;
+      font-weight: bold;
+      color: #004d80;
+    }
+    .container {
+      width: 90%;
+      max-width: 800px;
+      margin: 30px auto;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+    #gauge {
+      width: 300px;
+      height: 200px;
+      margin: auto;
+    }
+    canvas {
+      margin-top: 30px;
+    }
+    footer {
+      margin-top: 30px;
+      font-size: 0.9em;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <header>Drainity Monitoring System</header>
+  <div class="container">
+    <h2>Rubbish Level (cm)</h2>
+    <div id="gauge"></div>
+    <p id="status"></p>
+    <canvas id="lineChart"></canvas>
+    <footer>
+      <p>Last Update: <span id="updateTime">--</span></p>
+    </footer>
+  </div>
+
+  <script>
+    const channelID = 3123544;
+    const apiKey = "XADTYFGMO2LY8H35";
+
+    const gauge = new JustGage({
+      id: "gauge",
+      value: 0,
+      min: 0,
+      max: 1000,
+      title: "Rubbish Level",
+      label: "cm",
+      levelColors: ["#4db8ff", "#80bfff", "#ff0000"]
+    });
+
+    const ctx = document.getElementById('lineChart').getContext('2d');
+    const lineChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Rubbish Level (cm)',
+          data: [],
+          borderColor: '#007acc',
+          backgroundColor: 'rgba(0,122,204,0.2)',
+          tension: 0.2,
+          fill: true
+        }]
+      },
+      options: {
+        scales: {
+          x: { title: { display: true, text: 'Time' } },
+          y: { title: { display: true, text: 'Level (cm)' }, min: 0, max: 1000 }
+        }
+      }
+    });
+
+    async function fetchData() {
+      const url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?api_key=${apiKey}&results=10`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        const feeds = data.feeds;
+
+        if (feeds.length > 0) {
+          const latest = feeds[feeds.length - 1];
+          const level = parseFloat(latest.field1);
+
+          // Update gauge
+          gauge.refresh(level);
+
+          // Update chart
+          lineChart.data.labels = feeds.map(f => new Date(f.created_at).toLocaleTimeString());
+          lineChart.data.datasets[0].data = feeds.map(f => parseFloat(f.field1));
+          lineChart.update();
+
+          // Update time
+          document.getElementById("updateTime").textContent =
+            new Date(latest.created_at).toLocaleString();
+
+          // Alert if level high
+          const status = document.getElementById("status");
+          if (level >= 800) {
+            status.innerHTML = "<b style='color:red;'>Rubbish bin is almost full! Please clean it.</b>";
+            alert("Rubbish bin is almost full! Please clean it.");
+          } else {
+            status.innerHTML = "<b style='color:green;'>Rubbish level is normal.</b>";
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    }
+
+    fetchData();
+    setInterval(fetchData, 15000); // update every 15s
+  </script>
+</body>
+</html>
